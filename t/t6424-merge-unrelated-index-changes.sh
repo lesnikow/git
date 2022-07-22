@@ -114,6 +114,32 @@ test_expect_success 'resolve, non-trivial' '
 	test_path_is_missing .git/MERGE_HEAD
 '
 
+test_expect_success 'resolve, trivial, related file removed' '
+	git reset --hard &&
+	git checkout B^0 &&
+
+	git rm a &&
+	test_path_is_missing a &&
+
+	test_must_fail git merge -s resolve C^0 &&
+
+	test_path_is_missing a &&
+	test_path_is_missing .git/MERGE_HEAD
+'
+
+test_expect_success 'resolve, non-trivial, related file removed' '
+	git reset --hard &&
+	git checkout B^0 &&
+
+	git rm a &&
+	test_path_is_missing a &&
+
+	test_must_fail git merge -s resolve D^0 &&
+
+	test_path_is_missing a &&
+	test_path_is_missing .git/MERGE_HEAD
+'
+
 test_expect_success 'recursive' '
 	git reset --hard &&
 	git checkout B^0 &&
@@ -240,6 +266,38 @@ test_expect_success 'subtree' '
 	test_path_is_file random_file &&
 	git rev-parse --verify :random_file &&
 	test_path_is_missing .git/MERGE_HEAD
+'
+
+test_expect_success 'avoid failure due to stat-dirty files' '
+	git reset --hard &&
+	git checkout B^0 &&
+
+	# Make "a" be stat-dirty
+	test-tool chmtime =+1 a &&
+
+	# stat-dirty file should not prevent stash creation in builtin/merge.c
+	git merge -s resolve -s recursive D^0
+'
+
+test_expect_success 'resolve && recursive && ort' '
+	git reset --hard &&
+	git checkout B^0 &&
+
+	test_seq 0 10 >a &&
+	git add a &&
+	git rev-parse :a >expect &&
+
+	sane_unset GIT_TEST_MERGE_ALGORITHM &&
+	test_must_fail git merge -s resolve -s recursive -s ort C^0 >output 2>&1 &&
+
+	grep "Trying merge strategy resolve..." output &&
+	grep "Trying merge strategy recursive..." output &&
+	grep "Trying merge strategy ort..." output &&
+	grep "No merge strategy handled the merge." output &&
+
+	# Changes to "a" should remain staged
+	git rev-parse :a >actual &&
+	test_cmp expect actual
 '
 
 test_done
